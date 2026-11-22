@@ -1,16 +1,11 @@
 # VR Soundboard
 
-A soundboard you open in your browser. It has funny sounds, your own MP3s, and full songs from Spotify.
+A soundboard you open in your browser. It has the most viral meme sounds and full songs from Spotify.
 
 ## How to open it
 
 Double-click `index.html`. It opens in your browser. Chrome or Edge work best.
-
-## Adding a Spotify song
-
-1. Click **Find on Spotify** next to the song.
-2. On the song, click the **3 dots → Share → Copy song link**.
-3. Paste the link into the box and press **Add**.
+You need the internet on, because the sounds and songs load from the web.
 
 Stay logged into Spotify in that browser so the whole song plays, not just 30 seconds.
 
@@ -19,7 +14,7 @@ Stay logged into Spotify in that browser so the whole song plays, not just 30 se
 The game only sends out what goes into your microphone. So we make a pretend microphone.
 
 1. Get **VB-Cable** (it's free) from vb-audio.com. Install it, then restart your computer.
-2. On the soundboard, click **Find more outputs** and pick **CABLE Input**.
+2. On the soundboard, click **Find outputs** and pick **CABLE Input**.
 3. In your VR game, set your **microphone** to **CABLE Output**.
 4. For Spotify songs: open Windows **Settings → Sound → Volume mixer** and set your browser's output to **CABLE Input**.
 
