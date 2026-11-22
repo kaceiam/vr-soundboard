@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VR Soundboard</title>
+<style>
+  :root { --bg:#14121f; --card:#221e36; --text:#f3f0ff; --muted:#a59fc4; --accent:#8b5cf6; --hot:#f43f5e; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui, Segoe UI, sans-serif; padding:16px; }
+  h1 { margin:0 0 4px; font-size:28px; }
+  h2 { margin:28px 0 10px; font-size:20px; }
+  p.hint { color:var(--muted); margin:4px 0 12px; }
+  .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; background:var(--card); padding:12px; border-radius:14px; }
+  select, input, button { font:inherit; border-radius:10px; border:none; padding:10px 12px; }
+  select, input { background:#0f0d18; color:var(--text); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:12px; }
+  .pad { background:var(--card); color:var(--text); font-size:18px; font-weight:700; padding:26px 10px; cursor:pointer; border:2px solid transparent; transition:transform .08s; }
+  .pad:hover { border-color:var(--accent); }
+  .pad:active { transform:scale(.95); background:var(--accent); }
+  .pad .e { display:block; font-size:34px; margin-bottom:6px; }
+  .stop { background:var(--hot); color:white; font-weight:700; cursor:pointer; }
+  .go { background:var(--accent); color:white; font-weight:700; cursor:pointer; }
+  .song { background:var(--card); border-radius:14px; padding:12px; margin-bottom:12px; }
+  .song-top { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .song-top b { font-size:18px; }
+  .song a { color:#c4b5fd; }
+  .song input { flex:1; min-width:200px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  iframe { width:100%; height:152px; border:0; border-radius:12px; }
+  .small { font-size:14px; padding:6px 10px; background:#3a3358; color:var(--text); cursor:pointer; }
+  #vol { width:140px; padding:0; }
+</style>
+</head>
+<body>
+<h1>🎧 VR Soundboard</h1>
+<p class="hint">Click a button to play. Pick where the sound goes in the box below.</p>
+
+<div class="bar">
+  <label>Sound goes to:</label>
+  <select id="out"><option value="">My speakers / headset (default)</option></select>
+  <button class="small" id="findOut">Find more outputs</button>
+  <label>Volume</label><input type="range" id="vol" min="0" max="1" step="0.01" value="0.8">
+  <button class="stop" id="stopAll">■ Stop all</button>
+</div>
+
+<h2>🔥 Popular sounds</h2>
+<div class="grid" id="sfx"></div>
+
+<h2>📁 My own sounds</h2>
+<p class="hint">Got an MP3 of a sound or song? Add it here and it becomes a button. It stays saved.</p>
+<div class="row"><input type="file" id="file" accept="audio/*" multiple></div>
+<div class="grid" id="mine" style="margin-top:12px"></div>
+
+<h2>🎵 Songs (full songs from Spotify)</h2>
+<p class="hint">For each song: click <b>Find on Spotify</b>, click the 3 dots on the song → Share → Copy song link, then paste it here and press Add. Be logged into Spotify in this browser so the whole song plays (not just a preview).</p>
+<div id="songs"></div>
+<div class="song">
+  <div class="song-top"><b>➕ Add another song</b></div>
+  <div class="row"><input id="newName" placeholder="Song name"><input id="newLink" placeholder="Paste Spotify link"><button class="go" id="addSong">Add</button></div>
+</div>
+
+<script>
+// ---------- audio setup ----------
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
+const master = ctx.createGain(); master.gain.value = 0.8; master.connect(ctx.destination);
+let playing = [];
+document.getElementById('vol').oninput = e => master.gain.value = e.target.value;
+
+function track(node, stopAt) { playing.push(node); node.onended = () => playing = playing.filter(n => n !== node); }
+function osc(type, freq, start, dur, vol = 0.4, endFreq) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, start);
+  if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, start + dur);
+  g.gain.setValueAtTime(vol, start); g.gain.exponentialRampToValueAtTime(0.001, start + dur);
+  o.connect(g).connect(master); o.start(start); o.stop(start + dur + 0.05); track(o);
+}
+function noise(start, dur, vol = 0.4, filterFreq = 3000, type = 'lowpass') {
+  const b = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+  s.buffer = b; f.type = type; f.frequency.value = filterFreq;
+  g.gain.setValueAtTime(vol, start); g.gain.exponentialRampToValueAtTime(0.001, start + dur);
+  s.connect(f).connect(g).connect(master); s.start(start); track(s);
+}
+
+const SFX = [
+  ['📯','Air Horn', t => { for (let r = 0; r < 3; r++) { const s = t + r * 0.32; [440, 554, 659].forEach(f => osc('sawtooth', f, s, r === 2 ? 0.9 : 0.25, 0.18)); } }],
+  ['💥','Vine Boom', t => { osc('sine', 120, t, 1.4, 0.9, 35); osc('triangle', 60, t, 1.2, 0.6, 30); noise(t, 0.15, 0.4, 800); }],
+  ['🥁','Ba Dum Tss', t => { osc('sine', 180, t, 0.15, 0.7, 90); osc('sine', 140, t + 0.18, 0.15, 0.7, 70); noise(t + 0.4, 0.8, 0.35, 7000, 'highpass'); }],
+  ['🎺','Sad Trombone', t => { [[392,.45],[370,.45],[349,.45],[330,1.3]].reduce((s,[f,d]) => { osc('sawtooth', f, s, d, 0.22, f * 0.97); return s + d; }, t); }],
+  ['🚨','Siren', t => { for (let i = 0; i < 4; i++) { osc('square', 600, t + i * 0.5, 0.25, 0.15, 1000); osc('square', 1000, t + i * 0.5 + 0.25, 0.25, 0.15, 600); } }],
+  ['🌀','Boing', t => { const o = ctx.createOscillator(), g = ctx.createGain(), l = ctx.createOscillator(), lg = ctx.createGain(); o.frequency.value = 300; l.frequency.value = 14; lg.gain.value = 120; l.connect(lg).connect(o.frequency); g.gain.setValueAtTime(.4,t); g.gain.exponentialRampToValueAtTime(.001,t+.8); o.connect(g).connect(master); o.start(t); l.start(t); o.stop(t+.85); l.stop(t+.85); track(o); }],
+  ['🔫','Laser', t => { for (let i = 0; i < 3; i++) osc('square', 1500, t + i * 0.18, 0.15, 0.2, 200); }],
+  ['👏','Applause', t => { for (let i = 0; i < 60; i++) noise(t + Math.random() * 2.2, 0.06, 0.25, 2500, 'bandpass'); }],
+  ['❌','Wrong Buzzer', t => { osc('sawtooth', 110, t, 0.9, 0.35); osc('square', 116, t, 0.9, 0.2); }],
+  ['✅','Correct Ding', t => { osc('sine', 1046, t, 0.5, 0.4); osc('sine', 1568, t + 0.12, 0.8, 0.35); }],
+  ['🏆','Victory', t => { [[523,.15],[523,.15],[523,.15],[659,.5],[587,.15],[659,.15],[784,.9]].reduce((s,[f,d]) => { osc('square', f, s, d, 0.15); osc('triangle', f / 2, s, d, 0.2); return s + d; }, t); }],
+  ['🥁','Drum Roll', t => { for (let i = 0; i < 40; i++) noise(t + i * 0.05, 0.05, 0.15 + i * 0.006, 1800); noise(t + 2.05, 1.2, 0.5, 8000, 'highpass'); osc('sine', 90, t + 2.05, 0.4, 0.8, 50); }],
+  ['😱','Dun Dun Dunnn', t => { [[0,.3],[.35,.3],[.75,1.6]].forEach(([s,d],i) => { const f = [196,185,155][i]; osc('sawtooth', f, t + s, d, 0.2); osc('sawtooth', f / 2, t + s, d, 0.2); }); }],
+  ['🦗','Crickets', t => { for (let i = 0; i < 8; i++) for (let j = 0; j < 3; j++) osc('sine', 4500, t + i * 0.4 + j * 0.05, 0.03, 0.12); }],
+  ['🐸','Bonk', t => { osc('triangle', 900, t, 0.25, 0.6, 250); noise(t, 0.05, 0.5, 2000); }],
+  ['📢','Bass Drop', t => { osc('sine', 300, t, 2.2, 0.8, 30); osc('sawtooth', 150, t, 2.2, 0.15, 25); }],
+];
+
+const sfxGrid = document.getElementById('sfx');
+SFX.forEach(([e, name, fn]) => {
+  const b = document.createElement('button'); b.className = 'pad';
+  b.innerHTML = `<span class="e">${e}</span>${name}`;
+  b.onclick = () => { ctx.resume(); fn(ctx.currentTime + 0.02); };
+  sfxGrid.appendChild(b);
+});
+
+// ---------- my own sound files (saved in this browser) ----------
+let db;
+const openDB = indexedDB.open('vr-soundboard', 1);
+openDB.onupgradeneeded = () => openDB.result.createObjectStore('files', { keyPath: 'id', autoIncrement: true });
+openDB.onsuccess = () => { db = openDB.result; loadMine(); };
+function loadMine() {
+  const grid = document.getElementById('mine'); grid.innerHTML = '';
+  db.transaction('files').objectStore('files').getAll().onsuccess = e => e.target.result.forEach(addPad);
+}
+function addPad(rec) {
+  const grid = document.getElementById('mine');
+  const b = document.createElement('button'); b.className = 'pad';
+  b.innerHTML = `<span class="e">🔊</span>${rec.name.replace(/\.[^.]+$/, '')}`;
+  b.title = 'Right-click to delete';
+  b.onclick = async () => {
+    ctx.resume();
+    const buf = await ctx.decodeAudioData(await rec.blob.arrayBuffer());
+    const s = ctx.createBufferSource(); s.buffer = buf; s.connect(master); s.start(); track(s);
+  };
+  b.oncontextmenu = ev => { ev.preventDefault(); if (confirm('Delete ' + rec.name + '?')) { db.transaction('files', 'readwrite').objectStore('files').delete(rec.id); b.remove(); } };
+  grid.appendChild(b);
+}
+document.getElementById('file').onchange = e => {
+  [...e.target.files].forEach(f => {
+    const tx = db.transaction('files', 'readwrite');
+    tx.objectStore('files').add({ name: f.name, blob: f }).onsuccess = ev => addPad({ id: ev.target.result, name: f.name, blob: f });
+  });
+  e.target.value = '';
+};
+
+// ---------- stop + output picker ----------
+document.getElementById('stopAll').onclick = () => {
+  playing.forEach(n => { try { n.stop(); } catch {} }); playing = [];
+  document.querySelectorAll('#songs iframe').forEach(f => f.src = f.src); // reload players to stop them
+};
+async function listOutputs() {
+  try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach(t => t.stop()); } catch {}
+  const sel = document.getElementById('out'), keep = sel.value;
+  sel.innerHTML = '<option value="">My speakers / headset (default)</option>';
+  (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audiooutput' && d.deviceId !== 'default')
+    .forEach(d => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || 'Output'; sel.appendChild(o); });
+  sel.value = keep;
+}
+document.getElementById('findOut').onclick = listOutputs;
+document.getElementById('out').onchange = async e => {
+  if (ctx.setSinkId) { try { await ctx.setSinkId(e.target.value); } catch (err) { alert('Could not switch output: ' + err.message); } }
+  else alert('Use Chrome or Edge to pick an output.');
+};
+
+// ---------- songs ----------
+const DEFAULT_SONGS = [
+  { name: 'Cosmic Relief', link: '' },
+  { name: 'SugarCrash!', link: '' },
+  { name: 'Cats – The Living Tombstone', link: '' },
+];
+let songs;
+try { songs = JSON.parse(localStorage.getItem('vr-songs')) || DEFAULT_SONGS; } catch { songs = DEFAULT_SONGS; }
+function saveSongs() { try { localStorage.setItem('vr-songs', JSON.stringify(songs)); } catch {} }
+function embedUrl(link) {
+  const m = (link || '').match(/open\.spotify\.com\/(?:intl-[a-z]+\/)?(track|album|playlist)\/([A-Za-z0-9]+)/);
+  return m ? `https://open.spotify.com/embed/${m[1]}/${m[2]}` : null;
+}
+function drawSongs() {
+  const box = document.getElementById('songs'); box.innerHTML = '';
+  songs.forEach((s, i) => {
+    const div = document.createElement('div'); div.className = 'song';
+    const url = embedUrl(s.link);
+    div.innerHTML = `<div class="song-top"><b>🎵 ${s.name}</b>
+      <span class="row"><a href="https://open.spotify.com/search/${encodeURIComponent(s.name)}" target="_blank">Find on Spotify ↗</a>
+      <button class="small" data-del="${i}">Remove</button></span></div>`;
+    if (url) {
+      div.innerHTML += `<iframe src="${url}" allow="autoplay; clipboard-write; encrypted-media; fullscreen" loading="lazy"></iframe>
+        <div class="row" style="margin-top:6px"><button class="small" data-edit="${i}">Change link</button></div>`;
+    } else {
+      div.innerHTML += `<div class="row"><input placeholder="Paste the Spotify song link here" data-link="${i}"><button class="go" data-save="${i}">Add</button></div>`;
+    }
+    box.appendChild(div);
+  });
+}
+document.getElementById('songs').onclick = e => {
+  const t = e.target.dataset;
+  if (t.del !== undefined) { songs.splice(+t.del, 1); saveSongs(); drawSongs(); }
+  if (t.edit !== undefined) { songs[+t.edit].link = ''; saveSongs(); drawSongs(); }
+  if (t.save !== undefined) {
+    const v = document.querySelector(`[data-link="${t.save}"]`).value.trim();
+    if (!embedUrl(v)) return alert('That doesn\'t look like a Spotify link. It should start with https://open.spotify.com/track/');
+    songs[+t.save].link = v; saveSongs(); drawSongs();
+  }
+};
+document.getElementById('addSong').onclick = () => {
+  const name = document.getElementById('newName').value.trim(), link = document.getElementById('newLink').value.trim();
+  if (!name) return alert('Type the song name first.');
+  if (link && !embedUrl(link)) return alert('That doesn\'t look like a Spotify link.');
+  songs.push({ name, link }); saveSongs(); drawSongs();
+  document.getElementById('newName').value = document.getElementById('newLink').value = '';
+};
+drawSongs();
+</script>
+</body>
+</html>
