@@ -108,13 +108,15 @@ const grid = document.getElementById('sfx');
 SOUNDS.forEach(([name, file]) => {
   const b = document.createElement('button');
   b.className = 'pad'; b.textContent = name;
-  b.onclick = () => {
+  b.onclick = async () => {
     const a = new Audio(BASE + file);
     a.volume = volume;
-    if (outId && a.setSinkId) a.setSinkId(outId).catch(() => {});
     b.classList.add('on');
     a.onended = a.onerror = () => { b.classList.remove('on'); playing = playing.filter(x => x !== a); };
     playing.push(a);
+    // Switch to the chosen output BEFORE playing, so none of the sound leaks out of the wrong speakers.
+    if (outId && a.setSinkId) { try { await a.setSinkId(outId); } catch {} }
+    if (!playing.includes(a)) return;   // "Stop all" was pressed meanwhile
     a.play().catch(() => b.classList.remove('on'));
   };
   grid.appendChild(b);
